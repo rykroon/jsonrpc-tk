@@ -1,7 +1,9 @@
-
 from typing import Any
 from jsonrpctk.types import (
-    JsonRpcRequest, JsonRpcError,JsonRpcErrorResponse, JsonRpcSuccessResponse
+    JsonRpcRequest,
+    JsonRpcError,
+    JsonRpcErrorResponse,
+    JsonRpcSuccessResponse,
 )
 
 

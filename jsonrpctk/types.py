@@ -27,4 +27,4 @@ class JsonRpcErrorResponse(TypedDict):
 
 
 JsonRpcResponse = JsonRpcSuccessResponse | JsonRpcErrorResponse
-JsonRpcApp = Callable[[JsonRpcRequest], JsonRpcResponse]
+JsonRpcApp = Callable[[JsonRpcRequest], JsonRpcResponse | None]
