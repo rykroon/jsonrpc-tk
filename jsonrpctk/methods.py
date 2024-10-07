@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, InitVar
+from collections.abc import Sequence
 import inspect
 from typing import Any, Callable, ParamSpec
 
@@ -10,17 +10,16 @@ from jsonrpctk.utils import create_success_response
 P = ParamSpec("P")
 
 
-@dataclass(slots=True)
-class Method:
-    func: Callable[P, Any]
-    name: str | None = None
-    sig: inspect.Signature = field(init=False)
+class BaseMethod:
+    def __init__(self, method: Callable[P, Any], /, *, name: str | None = None):
+        self.method = method
+        self.name = name or self.method.__name__
 
-    def __post_init__(self):
-        if self.name is None:
-            self.name = self.func.__name__
-
-        self.sig = inspect.Signature.from_callable(self.func)
+    def call_method(self, request: JsonRpcRequest) -> Any:
+        """
+            Should raise a JsonRpcException if the params are invalid.
+        """
+        raise NotImplementedError
 
     def __call__(self, request: JsonRpcRequest) -> JsonRpcResponse | None:
         if request["method"] != self.name:
@@ -28,6 +27,20 @@ class Method:
                 code=JsonRpcErrorCode.METHOD_NOT_FOUND, message="method not found."
             )
 
+        result = self.call_method(request)
+        if "id" not in request:
+            return None
+
+        return create_success_response(id=request["id"], result=result)
+
+
+class Method(BaseMethod):
+
+    def __init__(self, method: Callable[P, Any], /, *, name: str | None = None):
+        super().__init__(self, method, name=name)
+        self.sig = inspect.Signature.from_callable(self.method)
+
+    def call_method(self, request: JsonRpcRequest) -> Any:
         params = request.get("params", None)
 
         try:
@@ -41,27 +54,17 @@ class Method:
         except TypeError as e:
             raise JsonRpcException(code=JsonRpcErrorCode.INVALID_PARAMS, message=str(e))
 
-        result = self.func(*ba.args, **ba.kwargs)
-        if "id" not in request:
-            return None
-
-        return create_success_response(id=request["id"], result=result)
+        return self.method(*ba.args, **ba.kwargs)
 
 
-@dataclass(slots=True)
 class MethodDispatcher:
-    methods: dict[str, Method] = field(default_factory=dict, init=False)
+
+    def __init__(self, methods: Sequence[Method] | None = None):
+        self.methods = {} if methods is None else {m.name: m for m in methods}
 
     def __call__(self, request: JsonRpcRequest) -> JsonRpcResponse:
         method = self.get_method(request["method"])
         return method(request)
-    
-    @classmethod
-    def from_list(cls, methods: list[Method]):
-        md = cls()
-        for method in methods:
-            md.add_method(method)
-        return md
 
     def add_method(self, method: Method, /) -> None:
         self.methods[method.name] = method

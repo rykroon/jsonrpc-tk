@@ -1,18 +1,26 @@
-from dataclasses import dataclass, field
+from collections.abc import Mapping
 from typing import Callable
 
 from jsonrpctk.exceptions import JsonRpcException, JsonRpcErrorCode
 from jsonrpctk.types import JsonRpcApp, JsonRpcError, JsonRpcRequest, JsonRpcResponse
-from jsonrpctk.utils import create_error, create_error_response
+from jsonrpctk.utils import create_error_response
 
 
 ExceptionHandler = Callable[[JsonRpcRequest, Exception], JsonRpcError]
 
 
-@dataclass(slots=True)
 class ExceptionMiddleware:
-    app: JsonRpcApp
-    handlers: dict[type[Exception | int], ExceptionHandler] = field(default_factory=dict)
+
+    def __init__(
+        self,
+        app: JsonRpcApp,
+        handlers: Mapping[type[Exception] | int, ExceptionHandler] | None = None,
+    ):
+        self.app = app
+        self.handlers = {} if handlers is None else dict(handlers)
+
+        if JsonRpcException not in self.handlers:
+            self.handlers[JsonRpcException] = self.jsonrpc_exception
 
     def __call__(self, request: JsonRpcRequest) -> JsonRpcResponse | None:
         try:
@@ -39,14 +47,8 @@ class ExceptionMiddleware:
 
         raise exc
 
+    def jsonrpc_exception(
+        self, request: JsonRpcRequest, exc: JsonRpcException
+    ) -> JsonRpcError:
+        return exc.to_error()
 
-def jsonrpc_exception_handler(
-    request: JsonRpcRequest, exc: JsonRpcException
-) -> JsonRpcError:
-    return exc.to_error()
-
-
-def exception_handler(request: JsonRpcRequest, exc: Exception) -> JsonRpcError:
-    return create_error(
-        code=JsonRpcErrorCode.INTERNAL_ERROR, message="Internal Server Error"
-    )
