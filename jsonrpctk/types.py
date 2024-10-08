@@ -1,3 +1,4 @@
+from collections.abc import MutableMapping
 from typing import Any, Callable, Literal, NotRequired, TypedDict
 
 
@@ -27,4 +28,6 @@ class JsonRpcErrorResponse(TypedDict):
 
 
 JsonRpcResponse = JsonRpcSuccessResponse | JsonRpcErrorResponse
-JsonRpcApp = Callable[[JsonRpcRequest], JsonRpcResponse | None]
+Context = MutableMapping[Any, Any]
+JsonRpcApp = Callable[[JsonRpcRequest, Context], JsonRpcResponse | None]
+ExceptionHandler = Callable[[JsonRpcRequest, Context, Exception], JsonRpcError]

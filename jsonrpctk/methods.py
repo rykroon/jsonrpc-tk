@@ -3,7 +3,7 @@ import inspect
 from typing import Any, Callable, ParamSpec
 
 from jsonrpctk.exceptions import JsonRpcException, JsonRpcErrorCode
-from jsonrpctk.types import JsonRpcRequest, JsonRpcResponse
+from jsonrpctk.types import Context, JsonRpcRequest, JsonRpcResponse
 from jsonrpctk.utils import create_success_response
 
 
@@ -15,19 +15,23 @@ class BaseMethod:
         self.method = method
         self.name = name or self.method.__name__
 
-    def call_method(self, request: JsonRpcRequest) -> Any:
+    def call_method(self, request: JsonRpcRequest, context: Context) -> Any:
         """
-            Should raise a JsonRpcException if the params are invalid.
+        Should raise a JsonRpcException if the params are invalid.
         """
         raise NotImplementedError
 
-    def __call__(self, request: JsonRpcRequest) -> JsonRpcResponse | None:
+    def __call__(
+        self, request: JsonRpcRequest, context: Context
+    ) -> JsonRpcResponse | None:
+        context.setdefault("app", default=self)
+
         if request["method"] != self.name:
             raise JsonRpcException(
                 code=JsonRpcErrorCode.METHOD_NOT_FOUND, message="method not found."
             )
 
-        result = self.call_method(request)
+        result = self.call_method(request, context)
         if "id" not in request:
             return None
 
@@ -35,12 +39,11 @@ class BaseMethod:
 
 
 class Method(BaseMethod):
-
     def __init__(self, method: Callable[P, Any], /, *, name: str | None = None):
         super().__init__(self, method, name=name)
         self.sig = inspect.Signature.from_callable(self.method)
 
-    def call_method(self, request: JsonRpcRequest) -> Any:
+    def call_method(self, request: JsonRpcRequest, context: Context) -> Any:
         params = request.get("params", None)
 
         try:
@@ -58,11 +61,11 @@ class Method(BaseMethod):
 
 
 class MethodDispatcher:
-
     def __init__(self, methods: Sequence[Method] | None = None):
         self.methods = {} if methods is None else {m.name: m for m in methods}
 
-    def __call__(self, request: JsonRpcRequest) -> JsonRpcResponse:
+    def __call__(self, request: JsonRpcRequest, context: Context) -> JsonRpcResponse:
+        context.setdefault("app", default=self)
         method = self.get_method(request["method"])
         return method(request)
 

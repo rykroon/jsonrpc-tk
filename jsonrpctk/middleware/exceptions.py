@@ -1,16 +1,18 @@
 from collections.abc import Mapping
-from typing import Callable
 
-from jsonrpctk.exceptions import JsonRpcException, JsonRpcErrorCode
-from jsonrpctk.types import JsonRpcApp, JsonRpcError, JsonRpcRequest, JsonRpcResponse
+from jsonrpctk.exceptions import JsonRpcException
+from jsonrpctk.types import (
+    Context,
+    ExceptionHandler,
+    JsonRpcApp,
+    JsonRpcError,
+    JsonRpcRequest,
+    JsonRpcResponse,
+)
 from jsonrpctk.utils import create_error_response
 
 
-ExceptionHandler = Callable[[JsonRpcRequest, Exception], JsonRpcError]
-
-
 class ExceptionMiddleware:
-
     def __init__(
         self,
         app: JsonRpcApp,
@@ -22,13 +24,16 @@ class ExceptionMiddleware:
         if JsonRpcException not in self.handlers:
             self.handlers[JsonRpcException] = self.jsonrpc_exception
 
-    def __call__(self, request: JsonRpcRequest) -> JsonRpcResponse | None:
+    def __call__(
+        self, request: JsonRpcRequest, context: Context
+    ) -> JsonRpcResponse | None:
+        context.setdefault("app", self)
         try:
-            return self.app(request)
+            return self.app(request, context)
 
         except Exception as e:
             handler = self.get_handler(e)
-            error = handler(request, e)
+            error = handler(request, context, e)
             if "id" not in request:
                 return None
             return create_error_response(id=request["id"], error=error)
@@ -48,7 +53,6 @@ class ExceptionMiddleware:
         raise exc
 
     def jsonrpc_exception(
-        self, request: JsonRpcRequest, exc: JsonRpcException
+        self, request: JsonRpcRequest, context: Context, exc: JsonRpcException
     ) -> JsonRpcError:
         return exc.to_error()
-
