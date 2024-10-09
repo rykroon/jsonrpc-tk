@@ -34,7 +34,7 @@ class JsonRpcServer:
         if self.middleware_stack is None:
             self.middleware_stack = self.build_middleware_stack()
 
-        return self.middleware_stack(request)
+        return self.middleware_stack(request, context)
 
     def build_middleware_stack(self) -> JsonRpcApp:
         error_handler = None
@@ -57,3 +57,7 @@ class JsonRpcServer:
             app = mw.cls(app, *mw.args, **mw.kwargs)
 
         return app
+
+    @property
+    def methods(self):
+        return self.method_dispatcher.methods

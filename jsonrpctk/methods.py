@@ -1,10 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import MappingView, Sequence
 import inspect
 from typing import Any, Callable, ParamSpec
 
 from jsonrpctk.exceptions import JsonRpcException, JsonRpcErrorCode
 from jsonrpctk.types import Context, JsonRpcRequest, JsonRpcResponse
-from jsonrpctk.utils import create_success_response
+from jsonrpctk.utils import create_error_response, create_success_response
 
 
 P = ParamSpec("P")
@@ -26,12 +26,20 @@ class BaseMethod:
     ) -> JsonRpcResponse | None:
         context.setdefault("app", default=self)
 
-        if request["method"] != self.name:
-            raise JsonRpcException(
-                code=JsonRpcErrorCode.METHOD_NOT_FOUND, message="method not found."
-            )
+        try:
+            if request["method"] != self.name:
+                raise JsonRpcException(
+                    code=JsonRpcErrorCode.METHOD_NOT_FOUND, message="method not found."
+                )
 
-        result = self.call_method(request, context)
+            result = self.call_method(request, context)
+        except JsonRpcException as e:
+            if context.get("app") is self:
+                if "id" not in request:
+                    return None
+                return create_error_response(request["id"], e.to_error())
+            raise e
+
         if "id" not in request:
             return None
 
@@ -62,19 +70,31 @@ class Method(BaseMethod):
 
 class MethodDispatcher:
     def __init__(self, methods: Sequence[Method] | None = None):
-        self.methods = {} if methods is None else {m.name: m for m in methods}
+        self._methods = {} if methods is None else {m.name: m for m in methods}
 
-    def __call__(self, request: JsonRpcRequest, context: Context) -> JsonRpcResponse:
+    def __call__(self, request: JsonRpcRequest, context: Context) -> JsonRpcResponse | None:
         context.setdefault("app", default=self)
-        method = self.get_method(request["method"])
-        return method(request)
+        try:
+            method = self.get_method(request["method"])
+            return method(request)
+
+        except JsonRpcException as e:
+            if context.get("app") is self:
+                if "id" in request:
+                    return None
+                return create_error_response(request["id"], error=e.to_error())
+            raise e
+
+    @property
+    def methods(self):
+        return MappingView(self._methods)
 
     def add_method(self, method: Method, /) -> None:
-        self.methods[method.name] = method
+        self._methods[method.name] = method
 
     def get_method(self, name: str) -> Method:
         try:
-            return self.methods[name]
+            return self._methods[name]
         except KeyError:
             raise JsonRpcException(
                 code=JsonRpcErrorCode.METHOD_NOT_FOUND, message="method not found."

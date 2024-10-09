@@ -27,8 +27,10 @@ class ServerErrorMiddleware:
         self, request: JsonRpcRequest, context: Context
     ) -> JsonRpcResponse | None:
         context.setdefault("app", self)
+
         try:
-            return self.app(request)
+            return self.app(request, context)
+
         except Exception as e:
             if self.debug is True:
                 return self.debug_response(request, context, e)
