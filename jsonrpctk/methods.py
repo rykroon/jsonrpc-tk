@@ -2,9 +2,10 @@ from collections.abc import MappingView, Sequence
 import inspect
 from typing import Any, Callable, ParamSpec
 
-from jsonrpctk.exceptions import JsonRpcException, JsonRpcErrorCode
-from jsonrpctk.types import Context, JsonRpcRequest, JsonRpcResponse
-from jsonrpctk.utils import create_error_response, create_success_response
+from jsonrpctk.errors import Error, ErrorCode
+from jsonrpctk.requests import Request
+from jsonrpctk.responses import Response
+from jsonrpctk.types import Context
 
 
 P = ParamSpec("P")
@@ -15,35 +16,34 @@ class BaseMethod:
         self.method = method
         self.name = name or self.method.__name__
 
-    def call_method(self, request: JsonRpcRequest, context: Context) -> Any:
+    def call_method(self, request: Request, context: Context) -> Any:
         """
         Should raise a JsonRpcException if the params are invalid.
         """
         raise NotImplementedError
 
-    def __call__(
-        self, request: JsonRpcRequest, context: Context
-    ) -> JsonRpcResponse | None:
+    def __call__(self, request: Request, context: Context) -> Response | None:
         context.setdefault("app", default=self)
 
         try:
-            if request["method"] != self.name:
-                raise JsonRpcException(
-                    code=JsonRpcErrorCode.METHOD_NOT_FOUND, message="method not found."
+            if request.method != self.name:
+                raise Error(
+                    code=ErrorCode.METHOD_NOT_FOUND, message="method not found."
                 )
 
             result = self.call_method(request, context)
-        except JsonRpcException as e:
+        except Error as e:
             if context.get("app") is self:
-                if "id" not in request:
+                if request.is_notification():
                     return None
-                return create_error_response(request["id"], e.to_error())
+
+                return Response.new_error(id=request.id, error=e.to_dict())
             raise e
 
-        if "id" not in request:
+        if request.is_notification():
             return None
 
-        return create_success_response(id=request["id"], result=result)
+        return Response.new_success(id=request.id, result=result)
 
 
 class Method(BaseMethod):
@@ -51,19 +51,12 @@ class Method(BaseMethod):
         super().__init__(self, method, name=name)
         self.sig = inspect.Signature.from_callable(self.method)
 
-    def call_method(self, request: JsonRpcRequest, context: Context) -> Any:
-        params = request.get("params", None)
-
+    def call_method(self, request: Request, context: Context) -> Any:
         try:
-            if isinstance(params, dict):
-                ba = self.sig.bind(**params)
-            elif isinstance(params, list):
-                ba = self.sig.bind(*params)
-            elif params is None:
-                ba = self.sig.bind()
+            ba = self.sig.bind(*request.args, **request.kwargs)
 
         except TypeError as e:
-            raise JsonRpcException(code=JsonRpcErrorCode.INVALID_PARAMS, message=str(e))
+            raise Error(code=ErrorCode.INVALID_PARAMS, message=str(e))
 
         return self.method(*ba.args, **ba.kwargs)
 
@@ -72,17 +65,17 @@ class MethodDispatcher:
     def __init__(self, methods: Sequence[Method] | None = None):
         self._methods = {} if methods is None else {m.name: m for m in methods}
 
-    def __call__(self, request: JsonRpcRequest, context: Context) -> JsonRpcResponse | None:
+    def __call__(self, request: Request, context: Context) -> Response | None:
         context.setdefault("app", default=self)
         try:
-            method = self.get_method(request["method"])
+            method = self.get_method(request.method)
             return method(request)
 
-        except JsonRpcException as e:
+        except Error as e:
             if context.get("app") is self:
-                if "id" in request:
+                if request.is_notification():
                     return None
-                return create_error_response(request["id"], error=e.to_error())
+                return Response.new_error(id=request.id, error=e.to_dict())
             raise e
 
     @property
@@ -96,8 +89,8 @@ class MethodDispatcher:
         try:
             return self._methods[name]
         except KeyError:
-            raise JsonRpcException(
-                code=JsonRpcErrorCode.METHOD_NOT_FOUND, message="method not found."
+            raise ErrorCode(
+                code=ErrorCode.METHOD_NOT_FOUND, message="method not found."
             )
 
     def method(

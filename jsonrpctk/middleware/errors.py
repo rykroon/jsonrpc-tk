@@ -1,13 +1,13 @@
 import traceback
 from typing import Callable
 
-from jsonrpctk.exceptions import JsonRpcErrorCode
+from jsonrpctk.errors import ErrorCode
+from jsonrpctk.requests import Request
+from jsonrpctk.responses import Response
 from jsonrpctk.types import (
     Context,
     JsonRpcApp,
-    JsonRpcRequest,
     JsonRpcError,
-    JsonRpcResponse,
 )
 from jsonrpctk.utils import create_error
 
@@ -16,16 +16,14 @@ class ServerErrorMiddleware:
     def __init__(
         self,
         app: JsonRpcApp,
-        handler: Callable[[JsonRpcRequest, Exception], JsonRpcError] | None = None,
+        handler: Callable[[Request, Exception], JsonRpcError] | None = None,
         debug: bool = False,
     ):
         self.app = app
         self.handler = handler
         self.debug = debug
 
-    def __call__(
-        self, request: JsonRpcRequest, context: Context
-    ) -> JsonRpcResponse | None:
+    def __call__(self, request: Request, context: Context) -> Response | None:
         context.setdefault("app", self)
 
         try:
@@ -40,17 +38,17 @@ class ServerErrorMiddleware:
                 return self.handler(request, context, e)
 
     def debug_response(
-        self, request: JsonRpcRequest, context: Context, exc: Exception
+        self, request: Request, context: Context, exc: Exception
     ) -> JsonRpcError:
         return create_error(
-            code=JsonRpcErrorCode.INTERNAL_ERROR,
+            code=ErrorCode.INTERNAL_ERROR,
             message=str(exc),
             data={"debug": {"traceback": "".join(traceback.format_exception(exc))}},
         )
 
     def error_response(
-        self, request: JsonRpcRequest, context: Context, exc: Exception
+        self, request: Request, context: Context, exc: Exception
     ) -> JsonRpcError:
         return create_error(
-            code=JsonRpcErrorCode.INTERNAL_ERROR, message="Internal Server Error"
+            code=ErrorCode.INTERNAL_ERROR, message="Internal Server Error"
         )
