@@ -7,7 +7,6 @@ from jsonrpctk.types import (
     Context,
     ExceptionHandler,
     JsonRpcApp,
-    JsonRpcError,
 )
 
 
@@ -19,9 +18,7 @@ class ExceptionMiddleware:
     ):
         self.app = app
         self._code_handlers: dict[int, ExceptionHandler] = {}
-        self._exception_handlers: dict[type[Exception], ExceptionHandler] = {
-            Error: self.jsonrpc_exception
-        }
+        self._exception_handlers: dict[type[Exception], ExceptionHandler] = {}
         if handlers is not None:
             for k, v in handlers.items():
                 self.add_handler(k, v)
@@ -60,8 +57,3 @@ class ExceptionMiddleware:
                 return self._exception_handlers[cls]
 
         return None
-
-    def jsonrpc_exception(
-        self, request: Request, context: Context, exc: Error
-    ) -> JsonRpcError:
-        return exc.to_dict()

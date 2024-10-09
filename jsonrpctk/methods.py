@@ -32,12 +32,13 @@ class BaseMethod:
                 )
 
             result = self.call_method(request, context)
+
         except Error as e:
             if context.get("app") is self:
                 if request.is_notification():
                     return None
 
-                return Response.new_error(id=request.id, error=e.to_dict())
+                return Response.new_error(id=request.id, error=e)
             raise e
 
         if request.is_notification():
@@ -75,7 +76,7 @@ class MethodDispatcher:
             if context.get("app") is self:
                 if request.is_notification():
                     return None
-                return Response.new_error(id=request.id, error=e.to_dict())
+                return Response.new_error(id=request.id, error=e)
             raise e
 
     @property
