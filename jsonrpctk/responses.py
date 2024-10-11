@@ -1,31 +1,58 @@
-from dataclasses import dataclass, asdict
 from typing import Any, Literal
 
-from jsonrpctk.undefined import Undefined, UndefinedType, _omit_undefined
+from jsonrpctk.undefined import Undefined, UndefinedType
 from jsonrpctk.errors import Error
 
 
-@dataclass(kw_only=True, slots=True)
-class Response:
-    jsonrpc: Literal["2.0"] = "2.0"
-    result: Any | UndefinedType = Undefined
-    error: Error | UndefinedType = Undefined
-    id: int | str | None
+class Response(dict):
 
-    def __post_init__(self):
-        if self.result is Undefined and self.error is Undefined:
+    def __init__(
+        self,
+        jsonrpc: Literal["2.0"],
+        id: int | str | None,
+        result: Any | UndefinedType = Undefined,
+        error: Error | dict[str, Any] | UndefinedType = Undefined,
+    ):
+        assert jsonrpc == "2.0", "Invalid json-rpc protocol."
+
+        if result is Undefined and error is Undefined:
             raise TypeError("Must specify a result or an error.")
 
-        if self.result is not Undefined and self.error is not Undefined:
+        if result is not Undefined and error is not Undefined:
             raise TypeError("Cannot specify both a result and an error.")
-    
+
+        self["jsonrpc"] = jsonrpc
+        self["id"] = id
+
+        if result is not Undefined:
+            self["result"] = result
+
+        self["error"] = Error(**error) if isinstance(error, dict) else error
+
     @classmethod
     def new_success(cls, result: Any, id: int | str | None):
-        return cls(result=result, id=id)
+        return cls(jsonrpc="2.0", result=result, id=id)
 
     @classmethod
     def new_error(cls, error: Any, id: int | str | None):
-        return cls(error=error, id=id)
+        return cls(jsonrpc="2.0", error=error, id=id)
 
-    def to_dict(self):
-        return asdict(self, dict_factory=_omit_undefined)
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]):
+        return cls(**payload)
+
+    @property
+    def jsonrpc(self):
+        return self["jsonrpc"]
+
+    @property
+    def result(self):
+        return self.get("result", Undefined)
+
+    @property
+    def error(self):
+        return self.get("error", Undefined)
+
+    @property
+    def id(self):
+        return self["id"]

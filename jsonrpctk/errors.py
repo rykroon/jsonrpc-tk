@@ -1,8 +1,7 @@
-from dataclasses import dataclass, asdict
 import enum
 from typing import Any
 
-from jsonrpctk.undefined import Undefined, UndefinedType, _omit_undefined
+from jsonrpctk.undefined import Undefined, UndefinedType
 
 
 class ErrorCode(enum.IntEnum):
@@ -13,13 +12,15 @@ class ErrorCode(enum.IntEnum):
     INTERNAL_ERROR = -32603
 
 
-@dataclass(kw_only=True)
 class Error(Exception):
     code: int
     message: str
     data: Any | UndefinedType = Undefined
 
-    def __post_init__(self):
+    def __init__(self, code: int, message: str, data: Any | UndefinedType = Undefined):
+        self.code = code
+        self.message = message
+        self.data = data
         super().__init__(self.code, self.message)
 
     @classmethod
@@ -27,4 +28,6 @@ class Error(Exception):
         return cls(**error)
 
     def to_dict(self):
-        return asdict(self, dict_factory=_omit_undefined)
+        if self.data is Undefined:
+            return {"code": self.code, "message": self.message}
+        return {"code": self.code, "message": self.message, "data": self.data}

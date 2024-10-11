@@ -1,4 +1,5 @@
 from collections.abc import MappingView, Sequence
+from dataclasses import dataclass, field, InitVar
 import inspect
 from typing import Any, Callable, ParamSpec
 
@@ -11,66 +12,66 @@ from jsonrpctk.types import Context
 P = ParamSpec("P")
 
 
-class BaseMethod:
-    def __init__(self, method: Callable[P, Any], /, *, name: str | None = None):
-        self.method = method
-        self.name = name or self.method.__name__
+class Method:
 
-    def call_method(self, request: Request, context: Context) -> Any:
-        """
-        Should raise a JsonRpcException if the params are invalid.
-        """
-        raise NotImplementedError
+    def __init__(self, func: Callable[P, Any], /, *, name: str | None = None):
+        self.func = func
+        self.name = name or func.__name__
+        self.sig = inspect.Signature.from_callable(self.func)
 
     def __call__(self, request: Request, context: Context) -> Response | None:
-        context.setdefault("app", default=self)
+        context.setdefault("app", self)
+
+        if request.method != self.name:
+            error = Error(
+                code=ErrorCode.METHOD_NOT_FOUND,
+                message=f"Method '{request.method}' not found."
+            )
+            self._handle_error(request, context, error)
 
         try:
-            if request.method != self.name:
-                raise Error(
-                    code=ErrorCode.METHOD_NOT_FOUND, message="method not found."
-                )
+            ba = self.sig.bind(*request.args, **request.kwargs)
 
-            result = self.call_method(request, context)
+        except TypeError as e:
+            error = Error(code=ErrorCode.INVALID_PARAMS, message=str(e))
+            return self._handle_error(request, context, error)
+
+        try:
+            result = self.func(*ba.args, **ba.kwargs)
 
         except Error as e:
-            if context.get("app") is self:
-                if request.is_notification():
-                    return None
-
-                return Response.new_error(id=request.id, error=e)
-            raise e
+            return self._handle_error(request, context, e)
 
         if request.is_notification():
             return None
 
         return Response.new_success(id=request.id, result=result)
+    
+    def _handle_error(self, request: Request, context: Context, error: Error) -> Response | None:
+        """
+            If the main app is this object (self), then return a Response,
+            otherwise raise the error and allow it to be handled up the stack.
+        """
+        if context.get("app") is self:
+            return (
+                None
+                if request.is_notification()
+                else Response.new_error(error=error, id=request.id)
+            )
 
-
-class Method(BaseMethod):
-    def __init__(self, method: Callable[P, Any], /, *, name: str | None = None):
-        super().__init__(self, method, name=name)
-        self.sig = inspect.Signature.from_callable(self.method)
-
-    def call_method(self, request: Request, context: Context) -> Any:
-        try:
-            ba = self.sig.bind(*request.args, **request.kwargs)
-
-        except TypeError as e:
-            raise Error(code=ErrorCode.INVALID_PARAMS, message=str(e))
-
-        return self.method(*ba.args, **ba.kwargs)
+        raise error
 
 
 class MethodDispatcher:
+
     def __init__(self, methods: Sequence[Method] | None = None):
         self._methods = {} if methods is None else {m.name: m for m in methods}
 
     def __call__(self, request: Request, context: Context) -> Response | None:
-        context.setdefault("app", default=self)
+        context.setdefault("app", self)
         try:
             method = self.get_method(request.method)
-            return method(request)
+            return method(request, context)
 
         except Error as e:
             if context.get("app") is self:
@@ -80,8 +81,12 @@ class MethodDispatcher:
             raise e
 
     @property
-    def methods(self):
+    def method_map(self) -> MappingView[str, Method]:
         return MappingView(self._methods)
+
+    @property
+    def method_names(self) -> tuple[str, ...]:
+        return tuple(m.name for m in self._methods.values())
 
     def add_method(self, method: Method, /) -> None:
         self._methods[method.name] = method
@@ -90,15 +95,15 @@ class MethodDispatcher:
         try:
             return self._methods[name]
         except KeyError:
-            raise ErrorCode(
-                code=ErrorCode.METHOD_NOT_FOUND, message="method not found."
+            raise Error(
+                code=ErrorCode.METHOD_NOT_FOUND, message=f"Method '{name}' not found."
             )
 
-    def method(
+    def register(
         self, func: Callable[P, Any] | None = None, /, *, name: str | None = None
     ):
         def wrapper(func):
-            self.add_method(Method(func, name))
+            self.add_method(Method(func=func, name=name))
             return func
 
         if func is None:

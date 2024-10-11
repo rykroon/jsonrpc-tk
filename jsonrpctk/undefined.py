@@ -18,7 +18,3 @@ class UndefinedType:
 
 
 Undefined: Final[UndefinedType] = UndefinedType()
-
-
-def _omit_undefined(pairs):
-    return {k: v for k, v in pairs if v is not Undefined}
