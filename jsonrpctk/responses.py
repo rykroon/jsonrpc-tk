@@ -9,9 +9,10 @@ class Response(dict):
     def __init__(
         self,
         jsonrpc: Literal["2.0"],
-        id: int | str | None,
+        *,
         result: Any | UndefinedType = Undefined,
         error: Error | dict[str, Any] | UndefinedType = Undefined,
+        id: int | str | None,
     ):
         assert jsonrpc == "2.0", "Invalid json-rpc protocol."
 
@@ -27,19 +28,16 @@ class Response(dict):
         if result is not Undefined:
             self["result"] = result
 
-        self["error"] = Error(**error) if isinstance(error, dict) else error
+        if error is not Undefined:
+            self["error"] = Error(**error) if isinstance(error, dict) else error
 
     @classmethod
-    def new_success(cls, result: Any, id: int | str | None):
-        return cls(jsonrpc="2.0", result=result, id=id)
+    def from_result(cls, result: Any, id: int | str | None):
+        return cls(jsonrpc="2.0", id=id, result=result)
 
     @classmethod
-    def new_error(cls, error: Any, id: int | str | None):
-        return cls(jsonrpc="2.0", error=error, id=id)
-
-    @classmethod
-    def from_dict(cls, payload: dict[str, Any]):
-        return cls(**payload)
+    def from_error(cls, error: Any, id: int | str | None):
+        return cls(jsonrpc="2.0", id=id, error=error)
 
     @property
     def jsonrpc(self):

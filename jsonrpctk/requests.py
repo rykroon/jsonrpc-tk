@@ -1,11 +1,7 @@
 from collections.abc import Mapping, Sequence
-import re
 from typing import Any, Literal
 
 from jsonrpctk.undefined import Undefined, UndefinedType
-
-
-INTERNAL_METHOD_REGEX: re.Pattern = re.compile(r"^rpc\.", flags=re.IGNORECASE)
 
 
 class Request(dict):
@@ -14,6 +10,7 @@ class Request(dict):
         self,
         jsonrpc: Literal["2.0"],
         method: str,
+        *,
         params: Mapping[str, Any] | Sequence[Any] | UndefinedType = Undefined,
         id: int | str | UndefinedType = Undefined
     ):

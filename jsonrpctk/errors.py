@@ -1,5 +1,6 @@
+from dataclasses import dataclass
 import enum
-from typing import Any
+from typing import Any, Callable
 
 from jsonrpctk.undefined import Undefined, UndefinedType
 
@@ -12,22 +13,44 @@ class ErrorCode(enum.IntEnum):
     INTERNAL_ERROR = -32603
 
 
-class Error(Exception):
+class Error(dict):
+
+    def __init__(
+        self,
+        code: int,
+        message: str,
+        *,
+        data: Any | UndefinedType = Undefined
+    ):
+        self["code"] = code
+        self["message"] = message
+        if data is not Undefined:
+            self["data"] = data
+
+    @property
+    def code(self) -> int:
+        return self["code"]
+
+    @property
+    def message(self) -> str:
+        return self["message"]
+
+    @property
+    def data(self) -> Any | UndefinedType:
+        return self.get("data", Undefined)
+
+    def to_exception(self) -> 'JsonRpcException':
+        return JsonRpcException(code=self.code, message=self.message, data=self.data)
+
+
+@dataclass(kw_only=True)
+class JsonRpcException(Exception):
     code: int
     message: str
     data: Any | UndefinedType = Undefined
 
-    def __init__(self, code: int, message: str, data: Any | UndefinedType = Undefined):
-        self.code = code
-        self.message = message
-        self.data = data
+    def __post_init__(self):
         super().__init__(self.code, self.message)
 
-    @classmethod
-    def from_dict(cls, error: dict[str, Any]):
-        return cls(**error)
-
-    def to_dict(self):
-        if self.data is Undefined:
-            return {"code": self.code, "message": self.message}
-        return {"code": self.code, "message": self.message, "data": self.data}
+    def to_error(self) -> Error:
+        return Error(code=self.code, message=self.message, data=self.data)

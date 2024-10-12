@@ -1,9 +1,8 @@
-from collections.abc import MappingView, Sequence
-from dataclasses import dataclass, field, InitVar
+from collections.abc import Sequence
 import inspect
 from typing import Any, Callable, ParamSpec
 
-from jsonrpctk.errors import Error, ErrorCode
+from jsonrpctk.errors import Error, ErrorCode, JsonRpcException
 from jsonrpctk.requests import Request
 from jsonrpctk.responses import Response
 from jsonrpctk.types import Context
@@ -39,14 +38,15 @@ class Method:
         try:
             result = self.func(*ba.args, **ba.kwargs)
 
-        except Error as e:
+        except JsonRpcException as e:
             return self._handle_error(request, context, e)
 
-        if request.is_notification():
-            return None
+        return (
+            None
+            if request.is_notification()
+            else Response.from_result(result=result, id=request.id)
+        )
 
-        return Response.new_success(id=request.id, result=result)
-    
     def _handle_error(self, request: Request, context: Context, error: Error) -> Response | None:
         """
             If the main app is this object (self), then return a Response,
@@ -56,10 +56,10 @@ class Method:
             return (
                 None
                 if request.is_notification()
-                else Response.new_error(error=error, id=request.id)
+                else Response.from_error(error=error, id=request.id)
             )
 
-        raise error
+        raise error.to_exception()
 
 
 class MethodDispatcher:
@@ -73,16 +73,12 @@ class MethodDispatcher:
             method = self.get_method(request.method)
             return method(request, context)
 
-        except Error as e:
+        except JsonRpcException as e:
             if context.get("app") is self:
                 if request.is_notification():
                     return None
-                return Response.new_error(id=request.id, error=e)
+                return Response.from_error(id=request.id, error=e)
             raise e
-
-    @property
-    def method_map(self) -> MappingView[str, Method]:
-        return MappingView(self._methods)
 
     @property
     def method_names(self) -> tuple[str, ...]:
@@ -95,7 +91,7 @@ class MethodDispatcher:
         try:
             return self._methods[name]
         except KeyError:
-            raise Error(
+            raise JsonRpcException(
                 code=ErrorCode.METHOD_NOT_FOUND, message=f"Method '{name}' not found."
             )
 

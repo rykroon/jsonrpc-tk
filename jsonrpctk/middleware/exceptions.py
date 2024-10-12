@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 
-from jsonrpctk.errors import Error
+from jsonrpctk.errors import Error, JsonRpcException
 from jsonrpctk.requests import Request
 from jsonrpctk.responses import Response
 from jsonrpctk.types import (
@@ -35,10 +35,11 @@ class ExceptionMiddleware:
                 raise e
 
             error = handler(request, context, e)
-            if request.is_notification():
-                return None
-
-            return Response.new_error(id=request.id, error=error)
+            return (
+                None
+                if request.is_notification()
+                else Response.from_error(error=error, id=request.id)
+            )
 
     def add_handler(self, exc_cls_or_code: type[Exception] | int, handler: ExceptionHandler):
         if isinstance(exc_cls_or_code, int):
@@ -48,7 +49,7 @@ class ExceptionMiddleware:
             self._exception_handlers[exc_cls_or_code] = handler
 
     def get_handler(self, exc: Exception) -> ExceptionHandler | None:
-        if isinstance(exc, Error):
+        if isinstance(exc, JsonRpcException):
             if exc.code in self._code_handlers:
                 return self._code_handlers[exc.code]
 
