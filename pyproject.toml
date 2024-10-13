@@ -27,9 +27,9 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Documentation = "https://github.com/Ryan Kroon/jsonrpctk#readme"
-Issues = "https://github.com/Ryan Kroon/jsonrpctk/issues"
-Source = "https://github.com/Ryan Kroon/jsonrpctk"
+Documentation = "https://github.com/rykroon/jsonrpctk#readme"
+Issues = "https://github.com/rykroon/jsonrpctk/issues"
+Source = "https://github.com/rykroon/jsonrpctk"
 
 [tool.hatch.version]
 path = "src/jsonrpctk/__about__.py"
