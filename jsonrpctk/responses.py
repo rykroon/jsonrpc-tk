@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import Any, Literal
 
 from jsonrpctk.undefined import Undefined, UndefinedType
@@ -29,7 +30,7 @@ class Response(dict):
             self["result"] = result
 
         if error is not Undefined:
-            self["error"] = Error(**error) if isinstance(error, dict) else error
+            self["error"] = Error(**error) if isinstance(error, Mapping) else error
 
     @classmethod
     def from_result(cls, result: Any, id: int | str | None):
@@ -40,17 +41,23 @@ class Response(dict):
         return cls(jsonrpc="2.0", id=id, error=error)
 
     @property
-    def jsonrpc(self):
+    def jsonrpc(self) -> Literal["2.0"]:
         return self["jsonrpc"]
 
     @property
-    def result(self):
-        return self.get("result", Undefined)
+    def result(self) -> Any | None:
+        return self.get("result")
 
     @property
-    def error(self):
-        return self.get("error", Undefined)
+    def error(self) -> Error | None:
+        return self.get("error")
 
     @property
     def id(self):
         return self["id"]
+
+    def is_success(self) -> bool:
+        return "result" in self
+    
+    def is_error(self) -> bool:
+        return "error" in self

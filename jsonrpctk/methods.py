@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 import inspect
-from typing import Any, Callable, ParamSpec
+from typing import Any, Callable, ParamSpec, TypeVar
 
 from jsonrpctk.errors import Error, ErrorCode, JsonRpcException
 from jsonrpctk.requests import Request
@@ -9,57 +9,34 @@ from jsonrpctk.types import Context
 
 
 P = ParamSpec("P")
+T = TypeVar["T"]
 
 
 class Method:
 
-    def __init__(self, func: Callable[P, Any], /, *, name: str | None = None):
+    def __init__(self, func: Callable[P, T], /, *, name: str | None = None):
         self.func = func
         self.name = name or func.__name__
         self.sig = inspect.Signature.from_callable(self.func)
 
     def __call__(self, request: Request, context: Context) -> Response | None:
-        context.setdefault("app", self)
-
         if request.method != self.name:
-            error = Error(
+            raise JsonRpcException(
                 code=ErrorCode.METHOD_NOT_FOUND,
-                message=f"Method '{request.method}' not found."
+                message=f"Method '{request.method}' was not found."
             )
-            self._handle_error(request, context, error)
 
         try:
             ba = self.sig.bind(*request.args, **request.kwargs)
 
         except TypeError as e:
-            error = Error(code=ErrorCode.INVALID_PARAMS, message=str(e))
-            return self._handle_error(request, context, error)
+            raise JsonRpcException(code=ErrorCode.INVALID_PARAMS, message=str(e))
 
-        try:
-            result = self.func(*ba.args, **ba.kwargs)
+        result = self.func(*ba.args, **ba.kwargs)
+        if request.is_notification():
+            return None
 
-        except JsonRpcException as e:
-            return self._handle_error(request, context, e)
-
-        return (
-            None
-            if request.is_notification()
-            else Response.from_result(result=result, id=request.id)
-        )
-
-    def _handle_error(self, request: Request, context: Context, error: Error) -> Response | None:
-        """
-            If the main app is this object (self), then return a Response,
-            otherwise raise the error and allow it to be handled up the stack.
-        """
-        if context.get("app") is self:
-            return (
-                None
-                if request.is_notification()
-                else Response.from_error(error=error, id=request.id)
-            )
-
-        raise error.to_exception()
+        return Response.from_result(result=result, id=request.id)
 
 
 class MethodDispatcher:
@@ -68,17 +45,8 @@ class MethodDispatcher:
         self._methods = {} if methods is None else {m.name: m for m in methods}
 
     def __call__(self, request: Request, context: Context) -> Response | None:
-        context.setdefault("app", self)
-        try:
-            method = self.get_method(request.method)
-            return method(request, context)
-
-        except JsonRpcException as e:
-            if context.get("app") is self:
-                if request.is_notification():
-                    return None
-                return Response.from_error(id=request.id, error=e)
-            raise e
+        method = self.get_method(request.method)
+        return method(request, context)
 
     @property
     def method_names(self) -> tuple[str, ...]:
@@ -96,7 +64,7 @@ class MethodDispatcher:
             )
 
     def register(
-        self, func: Callable[P, Any] | None = None, /, *, name: str | None = None
+        self, func: Callable[P, T] | None = None, /, *, name: str | None = None
     ):
         def wrapper(func):
             self.add_method(Method(func=func, name=name))

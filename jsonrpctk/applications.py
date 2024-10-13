@@ -52,12 +52,7 @@ class JsonRpcServer:
         )
 
         app = self.method_dispatcher
-
         for mw in reversed(middleware):
             app = mw.cls(app, *mw.args, **mw.kwargs)
 
         return app
-
-    @property
-    def methods(self):
-        return self.method_dispatcher.methods

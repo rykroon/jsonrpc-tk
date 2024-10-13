@@ -24,8 +24,6 @@ class ExceptionMiddleware:
                 self.add_handler(k, v)
 
     def __call__(self, request: Request, context: Context) -> Response | None:
-        context.setdefault("app", self)
-
         try:
             return self.app(request, context)
 

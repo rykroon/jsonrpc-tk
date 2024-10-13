@@ -19,16 +19,16 @@ class ServerErrorMiddleware:
         self.debug = debug
 
     def __call__(self, request: Request, context: Context) -> Response | None:
-        context.setdefault("app", self)
-
         try:
             return self.app(request, context)
 
         except Exception as e:
             if self.debug is True:
                 error = self.debug_response(request, context, e)
+
             elif self.handler is None:
                 error = self.error_response(request, context, e)
+
             else:
                 error = self.handler(request, context, e)
 

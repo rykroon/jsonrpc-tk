@@ -36,21 +36,24 @@ class Error(dict):
         return self["message"]
 
     @property
-    def data(self) -> Any | UndefinedType:
-        return self.get("data", Undefined)
+    def data(self) -> Any:
+        return self.get("data")
 
     def to_exception(self) -> 'JsonRpcException':
         return JsonRpcException(code=self.code, message=self.message, data=self.data)
 
 
-@dataclass(kw_only=True)
 class JsonRpcException(Exception):
-    code: int
-    message: str
-    data: Any | UndefinedType = Undefined
 
-    def __post_init__(self):
+    def __init__(self, code: int, message: str, data: Any | None = None):
+        self.code = code
+        self.message = message
+        self.data = data
         super().__init__(self.code, self.message)
 
     def to_error(self) -> Error:
-        return Error(code=self.code, message=self.message, data=self.data)
+        return Error(
+            code=self.code,
+            message=self.message,
+            data=self.data # check this out later.
+        )

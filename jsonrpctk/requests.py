@@ -25,20 +25,20 @@ class Request(dict):
             self["id"] = id
 
     @property
-    def jsonrpc(self):
+    def jsonrpc(self) -> Literal["2.0"]:
         return self["jsonrpc"]
 
     @property
-    def method(self):
+    def method(self) -> str:
         return self["method"]
 
     @property
-    def params(self):
-        return self.get("params", Undefined)
+    def params(self) -> Mapping[str, Any] | Sequence[Any] | None:
+        return self.get("params")
 
     @property
-    def id(self):
-        return self.get("id", Undefined)
+    def id(self) -> int | str | None:
+        return self.get("id")
 
     @property
     def args(self) -> tuple[Any, ...]:
@@ -49,4 +49,4 @@ class Request(dict):
         return dict(self.params) if isinstance(self.params, Mapping) else {}
 
     def is_notification(self) -> bool:
-        return self.id is Undefined
+        return "id" in self
