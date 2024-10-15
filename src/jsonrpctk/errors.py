@@ -1,6 +1,5 @@
-from dataclasses import dataclass
 import enum
-from typing import Any, Callable
+from typing import Any
 
 from jsonrpctk.undefined import Undefined, UndefinedType
 
