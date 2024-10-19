@@ -4,7 +4,7 @@ from typing import Any
 from jsonrpctk.middleware import Middleware
 from jsonrpctk.middleware.errors import ServerErrorMiddleware
 from jsonrpctk.middleware.exceptions import ExceptionMiddleware
-from jsonrpctk.methods import MethodDispatcher, Method
+from jsonrpctk.methods import Method, Namespace
 from jsonrpctk.types import (
     ExceptionHandler,
     JsonRpcRequest,

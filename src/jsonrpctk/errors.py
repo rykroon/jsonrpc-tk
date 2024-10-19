@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import enum
 from typing import Any
 
@@ -42,12 +43,13 @@ class Error(dict):
         return JsonRpcException(code=self.code, message=self.message, data=self.data)
 
 
+@dataclass(kw_only=True)
 class JsonRpcException(Exception):
+    code: int
+    message: str
+    data: Any | UndefinedType = Undefined
 
-    def __init__(self, code: int, message: str, data: Any | None = None):
-        self.code = code
-        self.message = message
-        self.data = data
+    def __post_init__(self):
         super().__init__(self.code, self.message)
 
     def to_error(self) -> Error:

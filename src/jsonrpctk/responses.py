@@ -34,11 +34,11 @@ class Response(dict):
 
     @classmethod
     def from_result(cls, result: Any, id: int | str | None):
-        return cls(jsonrpc="2.0", id=id, result=result)
+        return cls(jsonrpc="2.0", result=result, id=id)
 
     @classmethod
-    def from_error(cls, error: Any, id: int | str | None):
-        return cls(jsonrpc="2.0", id=id, error=error)
+    def from_error(cls, error: Error | Mapping[str, Any], id: int | str | None):
+        return cls(jsonrpc="2.0", error=error, id=id)
 
     @property
     def jsonrpc(self) -> Literal["2.0"]:
