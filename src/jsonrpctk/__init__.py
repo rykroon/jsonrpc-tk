@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import enum
-from typing import Any, Final, Literal, NotRequired, Self, TypedDict
+from typing import Any, Final, Literal, NotRequired, TypedDict
 
 
 # ~~~ Type Annotations ~~~
@@ -43,6 +43,7 @@ class MissingType:
     def __bool__(self) -> bool:
         return False
 
+
 MISSING: Final[MissingType] = MissingType()
 
 
@@ -52,13 +53,13 @@ class AttrDict(dict[Any, Any]):
         try:
             return self[attr]
         except KeyError:
-            raise AttributeError
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
 
     def __setattr__(self, attr: Any, value: Any) -> None:
         if value is not MISSING:
             self[attr] = value
 
-    def __delitem__(self, attr: Any) -> None:
+    def __delattr__(self, attr: Any) -> None:
         del self[attr]
 
 
@@ -111,15 +112,18 @@ class JsonRpcException(Exception):
 class Response(AttrDict):
     jsonrpc: Literal["2.0"]
     result: Any | MissingType = MISSING
-    error: JsonRpcError | MissingType = MISSING
+    error: Error | MissingType = MISSING
     id: int | str | None
 
     def __post_init__(self) -> None:
         if not self.is_success() and not self.is_error():
-            raise TypeError
+            raise TypeError("Must provide a result or an error.")
         
         if self.is_success() and self.is_error():
-            raise TypeError()
+            raise TypeError("Cannot provide both a result and an error.")
+        
+        if not isinstance(self.error, MissingType):
+            self.error = Error(**self.error)
 
     def get_result(self) -> Any | None:
         return getattr(self, "result", None)
