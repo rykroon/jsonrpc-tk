@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import enum
-from typing import Any, Final, Literal, NotRequired, TypedDict
+from typing import Any, Final, Literal, NotRequired, Self, TypedDict
 
 
 # ~~~ Type Annotations ~~~
@@ -47,34 +47,38 @@ class MissingType:
 MISSING: Final[MissingType] = MissingType()
 
 
-class AttrDict(dict[Any, Any]):
+class Request(dict[str, Any]):
 
-    def __getattr__(self, attr: Any) -> Any:
-        try:
-            return self[attr]
-        except KeyError:
-            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
+    def __init__(
+        self: Self,
+        *,
+        jsonrpc: Literal["2.0"],
+        method: str,
+        params: dict[str, Any] | list[Any] | MissingType = MISSING,
+        id: int | str | MissingType = MISSING
+    ):
+        self["jsonrpc"] = jsonrpc
+        self["method"] = method
 
-    def __setattr__(self, attr: Any, value: Any) -> None:
-        if value is not MISSING:
-            self[attr] = value
+        if params is not MISSING:
+            self["params"] = params
+        
+        if id is not MISSING:
+            self["id"] = id
 
-    def __delattr__(self, attr: Any) -> None:
-        del self[attr]
+    @property
+    def jsonrpc(self) -> Literal["2.0"]:
+        return self["jsonrpc"]
 
-
-@dataclass(repr=False, eq=False, kw_only=True)
-class Request(AttrDict):
-    jsonrpc: Literal["2.0"]
-    method: str
-    params: dict[str, Any] | list[Any] | MissingType = MISSING
-    id: int | str | MissingType = MISSING
+    @property
+    def method(self) -> str:
+        return self["method"]
 
     def get_params(self) -> dict[str, Any] | list[Any] | None:
-        return getattr(self, "params", None)
+        return self.get("params", None)
 
     def get_id(self) -> int | str | None:
-        return getattr(self, "id", None)
+        return self.get("id", None)
 
     def is_notification(self) -> bool:
         return "id" not in self
@@ -88,14 +92,31 @@ class ErrorCode(enum.IntEnum):
     INTERNAL_ERROR = -32603
 
 
-@dataclass(repr=False, eq=False, kw_only=True)
-class Error(AttrDict):
-    code: int
-    message: str
-    data: Any = MISSING
+class Error(dict[str, Any]):
+
+    def __init__(
+      self: Self,
+      *,
+      code: int,
+      message: str,
+      data: Any | MissingType = MISSING,
+    ):
+        self["code"] = code
+        self["message"] = message
+
+        if data is not MISSING:
+            self["data"] = data
+
+    @property
+    def code(self) -> int:
+        return self["code"]
+
+    @property
+    def message(self) -> str:
+        return self["message"]
 
     def get_data(self) -> Any | None:
-        return getattr(self, "data", None)
+        return self.get("data", None)
 
 
 @dataclass(kw_only=True)
@@ -108,28 +129,35 @@ class JsonRpcException(Exception):
         super().__init__(self.code, self.message)
 
 
-@dataclass(repr=False, eq=False, kw_only=True)
-class Response(AttrDict):
-    jsonrpc: Literal["2.0"]
-    result: Any | MissingType = MISSING
-    error: Error | MissingType = MISSING
-    id: int | str | None
+class Response(dict[str, Any]):
 
-    def __post_init__(self) -> None:
-        if not self.is_success() and not self.is_error():
+    def __init__(
+        self: Self,
+        *,
+        jsonrpc: Literal["2.0"],
+        result: Any | MissingType = MISSING,
+        error: Error | JsonRpcError | MissingType = MISSING,
+        id: int | str | None,
+    ) -> None:
+        if result is MISSING and error is MISSING:
             raise TypeError("Must provide a result or an error.")
         
-        if self.is_success() and self.is_error():
+        if result is not MISSING and error is not MISSING:
             raise TypeError("Cannot provide both a result and an error.")
         
-        if not isinstance(self.error, MissingType):
-            self.error = Error(**self.error)
+        self["jsonrpc"] = jsonrpc
+        self["id"] = id
+
+        if not isinstance(error, MissingType):
+            self["error"] = Error(**error)
+        else:
+            self["result"] = result            
 
     def get_result(self) -> Any | None:
-        return getattr(self, "result", None)
+        return self.get("result", None)
 
     def get_error(self) -> Error | None:
-        return getattr(self, "error", None)
+        return self.get("error", None)
 
     def is_success(self) -> bool:
         return "result" in self
@@ -146,4 +174,13 @@ class RequestBatch(list[JsonRpcRequest]):
 
 class ResponseBatch(list[JsonRpcResponse]):
     pass
+
+    def get_by_id(self, id: int | str) -> Response:
+        pass
+
+    def count_success(self) -> int:
+        pass
+
+    def count_error(self) -> int:
+        pass
 
